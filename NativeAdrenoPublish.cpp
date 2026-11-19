@@ -403,8 +403,29 @@ IOReturn AGXDeviceUserClient::clientMemoryForType(UInt32 type,IOOptionBits *opti
 /* Fence waits as the callers see them (int-147; method 6's own statistics count every poll): [0] waits, [1] us waited in total, [2] pauses
  * taken outside the connection lock, [3] the longest wait in us. */
 extern "C" {volatile uint64_t native_adreno_wait_outer[4];}
+/* SetPriority and Note of UniXNU's Adreno740 ABI (1c9029b), which the AdrenoMetal plug-in calls: [0] priority requests (the last one in
+ * [1] foreground | background << 8), [2] notes, [3] the last note's kind | count << 8. Accepted; nothing schedules by priority yet. */
+extern "C" {volatile uint32_t native_adreno_base_abi_calls[4];}
 static IOReturn runCore(AGXDeviceUserClient *connection,uint32_t method,const void *input,size_t input_size,void *output,size_t output_size)
 {
+    if(method==NativeAdrenoMethodSetPriority) {
+        if(!input || input_size!=sizeof(NativeAdrenoAbiPriority) || output_size)return kIOReturnBadArgument;
+        NativeAdrenoAbiPriority request{};
+        memcpy(&request,input,sizeof request);
+        if(request.foreground>5 || request.foreground==3 || request.background>5)return kIOReturnBadArgument;
+        native_adreno_base_abi_calls[0]=native_adreno_base_abi_calls[0]+1;
+        native_adreno_base_abi_calls[1]=request.foreground|request.background<<8;
+        return kIOReturnSuccess;
+    }
+    if(method==NativeAdrenoMethodNote) {
+        if(!input || input_size!=sizeof(NativeAdrenoAbiNote) || output_size)return kIOReturnBadArgument;
+        NativeAdrenoAbiNote note{};
+        memcpy(&note,input,sizeof note);
+        if(note.count>NativeAdrenoNoteWords)return kIOReturnBadArgument;
+        native_adreno_base_abi_calls[2]=native_adreno_base_abi_calls[2]+1;
+        native_adreno_base_abi_calls[3]=note.kind|note.count<<8;
+        return kIOReturnSuccess;
+    }
     if(method==NativeAdrenoMethodSetMetadata && input && input_size==sizeof(NativeAdrenoAbiMetadata)) {
         const NativeAdrenoAbiMetadata *meta=static_cast<const NativeAdrenoAbiMetadata *>(input);
         /* The raw test's line and the Turnip phase's line ("T ..." result or "W ..." watchdog sample) are kept apart, so neither hides the other. */
@@ -533,7 +554,9 @@ IOReturn AGXDeviceUserClient::externalMethod(uint32_t selector,IOExternalMethodA
         {&action,0,sizeof(NativeAdrenoAbiBoCpuMap),0,sizeof(NativeAdrenoAbiBoCpuMapReply)},
         {&action,0,sizeof(NativeAdrenoAbiBoCpuUnmap),0,0},
         {&action,0,0,0,sizeof(NativeAdrenoAbiDeviceInfo)},
-        {&action,0,sizeof(NativeAdrenoAbiBoImport),0,sizeof(NativeAdrenoAbiBoAllocReply)}};
+        {&action,0,sizeof(NativeAdrenoAbiBoImport),0,sizeof(NativeAdrenoAbiBoAllocReply)},
+        {&action,0,sizeof(NativeAdrenoAbiPriority),0,0},
+        {&action,0,sizeof(NativeAdrenoAbiNote),0,0}};
     native_adreno_metal_diag.ext_entries=native_adreno_metal_diag.ext_entries+1;
     if(selector<256)native_adreno_metal_diag.sel_bits[selector>>5]|=1u<<(selector&31);
     /* Tunnel. The sandbox resolves a filter policy for this class at open time and then admits only the selectors its profile lists,

@@ -30,6 +30,9 @@ enum {
     NativeAdrenoMethodBoCpuUnmap = 14,
     NativeAdrenoMethodGetDeviceInfo = 15,
     NativeAdrenoMethodBoImport = 16,
+    /* UniXNU's Adreno740 ABI (1c9029b), which the AdrenoMetal plug-in speaks: accepted here (penang). */
+    NativeAdrenoMethodSetPriority = 17,
+    NativeAdrenoMethodNote = 18,
     NativeAdrenoAbiMetadataBytes = 64,
     NativeAdrenoAbiMaxQueues = 8
 };
@@ -41,7 +44,9 @@ struct NativeAdrenoAbiParams {
     uint64_t max_bo_bytes;
 };
 enum {
-    NativeAdrenoParamsHostImport = 1  /* BoImport pins the caller's own pages (an IOSurface's) as a BO */
+    NativeAdrenoParamsHostImport = 1,  /* BoImport pins the caller's own pages (an IOSurface's) as a BO */
+    NativeAdrenoParamsOwnedCoherent = 2, /* (base ABI) BOs cacheable and IO-coherent: never set here, the A619 does not snoop */
+    NativeAdrenoParamsMemoryPressure = 4   /* (base ABI) the last user BO could not get its memory: not reported here yet */
 };
 struct NativeAdrenoAbiBoAlloc {
     uint64_t bytes;               /* 4KiB multiple, <= max_bo_bytes */
@@ -130,6 +135,22 @@ enum {
     NativeAdrenoDeviceClientIova = 1,     /* flags: the client chooses BO addresses (BoMap iova) */
     NativeAdrenoDeviceCachedCoherent = 2  /* flags: unused until IO-coherent BO memory exists */
 };
+/* The GPU priorities the process's Metal queues asked for, in Metal's numbering (MTLGPUPriority: 0 high, 1 normal, 2 low, 3 disabled,
+ * 4 normal-high, 5 real-time; the strongest of its queues): foreground while the process renders visible UI, background otherwise (its
+ * GPU role, task_get_gpu_role). A new connection has normal and disabled, a new Metal queue's values. */
+struct NativeAdrenoAbiPriority {
+    uint32_t foreground;          /* 0..5, 3 refused */
+    uint32_t background;          /* 0..5 */
+};
+/* A note a process leaves in the kernel's log (the board's export writes it as a row of kernel.rings.txt), for what only the process knows
+ * and has no file of its own to put it in (a sandboxed extension): its slow render passes and the pipelines it made or was refused.
+ * kind 1 pass, 2 pipeline; the words are the kind's record (NativeAdrenoNotePass, NativeAdrenoNotePipeline in the frontend). */
+enum { NativeAdrenoNoteWords = 30, NativeAdrenoNotePass = 1, NativeAdrenoNotePipeline = 2 };
+struct NativeAdrenoAbiNote {
+    uint32_t kind;
+    uint32_t count;               /* words used, <= NativeAdrenoNoteWords */
+    uint32_t words[NativeAdrenoNoteWords];
+};
 struct NativeAdrenoAbiDeviceInfo {
     uint32_t chip_id;             /* ADRENO_CHIPID, e.g. 0x43050a01 */
     uint32_t gmem_bytes;
@@ -147,6 +168,8 @@ struct NativeAdrenoAbiDeviceInfo {
 #if defined(__cplusplus)
 static_assert(sizeof(NativeAdrenoAbiDeviceInfo) == 64, "ABI device info layout");
 static_assert(sizeof(NativeAdrenoAbiParams) == 24, "ABI params layout");
+static_assert(sizeof(NativeAdrenoAbiPriority) == 8, "ABI priority layout");
+static_assert(sizeof(NativeAdrenoAbiNote) == 128, "ABI note layout");
 static_assert(sizeof(NativeAdrenoAbiBoAlloc) == 16, "ABI alloc layout");
 static_assert(sizeof(NativeAdrenoAbiBoMap) == 32, "ABI map layout");
 static_assert(sizeof(NativeAdrenoAbiBoImport) == 16, "ABI import layout");

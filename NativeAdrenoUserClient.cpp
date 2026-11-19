@@ -415,6 +415,8 @@ size_t NativeAdrenoUserClient::inputSize(uint32_t method)
     case NativeAdrenoMethodBoCpuMap:return sizeof(NativeAdrenoAbiBoCpuMap);
     case NativeAdrenoMethodBoCpuUnmap:return sizeof(NativeAdrenoAbiBoCpuUnmap);
     case NativeAdrenoMethodWaitFence:return sizeof(NativeAdrenoAbiWaitFence);
+    case NativeAdrenoMethodSetPriority:return sizeof(NativeAdrenoAbiPriority);
+    case NativeAdrenoMethodNote:return sizeof(NativeAdrenoAbiNote);
     default:return SIZE_MAX;
     }
 }
@@ -437,6 +439,8 @@ size_t NativeAdrenoUserClient::outputSize(uint32_t method)
     case NativeAdrenoMethodBoCpuMap:return sizeof(NativeAdrenoAbiBoCpuMapReply);
     case NativeAdrenoMethodBoCpuUnmap:return 0;
     case NativeAdrenoMethodBoImport:return sizeof(NativeAdrenoAbiBoAllocReply);
+    case NativeAdrenoMethodSetPriority:
+    case NativeAdrenoMethodNote:return 0;
     default:return SIZE_MAX;
     }
 }
